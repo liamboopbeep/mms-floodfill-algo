@@ -4,6 +4,8 @@
 #include <queue>
 #include "API.cpp"
 #include <stack>
+
+#include "C:\Users\Admin\Documents\Projects\Micromouse\mms2\spaghetti.hpp"
 using namespace std;
 
 #define UP 0
@@ -549,7 +551,6 @@ void move_forward()
 {
     API::moveForward();
     update_position(cur_direction);
-    robot_commands += "F";
     // log("foward");
 }
 
@@ -557,7 +558,6 @@ void turn_right()
 {
     API::turnRight();
     update_direction(cur_direction, 1);
-    robot_commands += "R";
     // log("Right");
 }
 
@@ -565,7 +565,6 @@ void turn_left()
 {
     API::turnLeft();
     update_direction(cur_direction, -1);
-    robot_commands += "L";
     // log("Left");
 }
 
@@ -596,8 +595,8 @@ void set_dir(int _dir)
     turn_left();
     return;
 }
-
-void turn_toward(int save_row, int save_col, int &cur_direction)
+int past_dir;
+int turn_toward(int save_row, int save_col, int &cur_direction)
 {
 
     int _dir = cur_direction;
@@ -623,17 +622,76 @@ void turn_toward(int save_row, int save_col, int &cur_direction)
             _dir = 1;
         }
     }
+    past_dir = cur_direction;
     set_dir(_dir);
+    return _dir;
 }
 
 
-void exec_shortest_path(std::queue<pair<int,int>>shortest_path){
+void exec_shortest_path(std::queue<pair<int,int>>shortest_path, int &cur_direction){
     while (!shortest_path.empty()){
+        
         turn_toward(shortest_path.front().first, shortest_path.front().second, cur_direction);
         shortest_path.pop();
+        if (cur_direction - past_dir == 1 || cur_direction - past_dir == 3 ){
+            robot_commands += "R";
+            move_forward();
+        }
+        else if (cur_direction - past_dir == -1 || cur_direction - past_dir == -3 ){
+            robot_commands += "L";
+            move_forward();
+        }
+        else{
         move_forward();
-
+        robot_commands += "F";
+        }
     }
+    robot_commands += "S";
+}
+
+enum States {ortho, ortho_L, ortho_LL, ortho_R, ortho_RR, diag_LR, diag_RL, diag_RR,diag_LL,st_stop,NB_STATES};
+enum Events {forw, left, right,ev_stop, NB_EVENTS};
+SPAG_DECLARE_FSM_TYPE_NOTIMER(fsm_p, States,Events,bool);
+
+void configureFSM(fsm_p & fsm){
+    fsm.assignTransition(States::ortho, Events::forw, States::ortho);
+    fsm.assignTransition(States::ortho_L, Events::forw, States::ortho);
+    fsm.assignTransition(States::ortho_LL, Events::forw, States::ortho);
+    fsm.assignTransition(States::ortho_R, Events::forw, States::ortho);
+    fsm.assignTransition(States::ortho_RR, Events::forw, States::ortho);
+    fsm.assignTransition(States::diag_LL, Events::forw, States::ortho);
+    fsm.assignTransition(States::diag_RR, Events::forw, States::ortho);
+    fsm.assignTransition(States::diag_RL, Events::forw, States::ortho);
+    fsm.assignTransition(States::diag_LR, Events::forw, States::ortho);
+
+
+    fsm.assignTransition(States::ortho, Events::left, States::ortho_L);
+    fsm.assignTransition(States::ortho_L,Events::left, States::ortho_LL);
+    fsm.assignTransition(States::ortho, Events::right, States::ortho_R);
+    fsm.assignTransition(States::ortho_R,Events::right, States::ortho_RR);
+    
+    fsm.assignTransition(States::ortho_L, Events::right, States::diag_LR);
+    fsm.assignTransition(States::ortho_LL, Events::right, States::diag_LR);
+    fsm.assignTransition(States::ortho_R, Events::left, States::diag_RL);
+    fsm.assignTransition(States::ortho_RR, Events::left, States::diag_RL);
+
+    fsm.assignTransition(States::diag_LR, Events::left, States::diag_RL);
+    fsm.assignTransition(States::diag_LR, Events::right, States::diag_RR);
+    fsm.assignTransition(States::diag_RL, Events::right, States::diag_LR);
+    fsm.assignTransition(States::diag_RL, Events::left, States::diag_LR);
+
+    fsm.assignTransition(States::diag_RR, Events::left, States::diag_RL);
+    fsm.assignTransition(States::diag_LL, Events::right, States::diag_LR);
+
+    fsm.assignTransition(States::ortho, Events::ev_stop, States::st_stop);
+    fsm.assignTransition(States::ortho_L, Events::ev_stop, States::st_stop);
+    fsm.assignTransition(States::ortho_LL, Events::ev_stop, States::st_stop);
+    fsm.assignTransition(States::ortho_R, Events::ev_stop, States::st_stop);
+    fsm.assignTransition(States::ortho_RR, Events::ev_stop, States::st_stop);
+    fsm.assignTransition(States::diag_LL, Events::ev_stop, States::st_stop);
+    fsm.assignTransition(States::diag_RR, Events::ev_stop, States::st_stop);
+    fsm.assignTransition(States::diag_RL, Events::ev_stop, States::st_stop);
+    fsm.assignTransition(States::diag_LR, Events::ev_stop, States::st_stop);   
 }
     
 
@@ -665,7 +723,7 @@ void exec_shortest_path(std::queue<pair<int,int>>shortest_path){
     //update_wall_debug(arr);
     API::turnLeft();
     API::turnLeft();
-    exec_shortest_path(shorted_path_go(arr,angle_now,new_coord,dest));
+    exec_shortest_path(shorted_path_go(arr,angle_now,new_coord,dest),cur_direction);
     std::cerr<<robot_commands<<endl;
 
 }   
